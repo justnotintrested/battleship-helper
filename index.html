@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Battleship Helper</title>
+<style>
+  body { font-family: sans-serif; text-align: center; }
+  .grid { display: grid; grid-template-columns: repeat(8, 40px); gap: 4px; justify-content: center; }
+  .cell {
+    width: 40px; height: 40px;
+    border: 1px solid #333;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; font-size: 18px;
+  }
+  .hit { background: #4caf50; }
+  .miss { background: #f44336; }
+  .suggest { background: #ffeb3b; }
+</style>
+</head>
+<body>
+
+<h3>Battleship Guess Helper</h3>
+<p>Click: Unknown → Hit → Miss → Reset</p>
+
+<div class="grid" id="grid"></div>
+<h4>Best next guesses highlighted</h4>
+
+<script>
+const SIZE = 8;
+const SHIPS = [2,3,4];
+let board = Array.from({length: SIZE}, () => Array(SIZE).fill(0));
+
+const grid = document.getElementById("grid");
+
+function probabilityMap() {
+  let prob = Array.from({length: SIZE}, () => Array(SIZE).fill(0));
+
+  for (let ship of SHIPS) {
+    for (let r=0;r<SIZE;r++) for (let c=0;c<=SIZE-ship;c++) {
+      let cells = [...Array(ship)].map((_,i)=>[r,c+i]);
+      let vals = cells.map(([x,y])=>board[x][y]);
+      if (vals.includes(-1)) continue;
+      if (vals.includes(1))
+        cells.forEach(([x,y])=> board[x][y]==0 && prob[x][y]++);
+    }
+    for (let c=0;c<SIZE;c++) for (let r=0;r<=SIZE-ship;r++) {
+      let cells = [...Array(ship)].map((_,i)=>[r+i,c]);
+      let vals = cells.map(([x,y])=>board[x][y]);
+      if (vals.includes(-1)) continue;
+      if (vals.includes(1))
+        cells.forEach(([x,y])=> board[x][y]==0 && prob[x][y]++);
+    }
+  }
+  return prob;
+}
+
+function render() {
+  grid.innerHTML = "";
+  let prob = probabilityMap();
+  let flat = prob.flat();
+  let max = Math.max(...flat);
+
+  for (let r=0;r<SIZE;r++) for (let c=0;c<SIZE;c++) {
+    let d = document.createElement("div");
+    d.className = "cell";
+    if (board[r][c]==1) d.classList.add("hit"), d.textContent="✓";
+    if (board[r][c]==-1) d.classList.add("miss"), d.textContent="×";
+    if (board[r][c]==0 && prob[r][c]==max && max>0) d.classList.add("suggest");
+
+    d.onclick = () => {
+      board[r][c] = board[r][c]==0 ? 1 : board[r][c]==1 ? -1 : 0;
+      render();
+    };
+    grid.appendChild(d);
+  }
+}
+
+render();
+</script>
+</body>
+</html>
