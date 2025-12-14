@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Battleship Shape Helper</title>
+<title>Shape Battleship Helper</title>
 <style>
   body { font-family: sans-serif; text-align: center; }
   .grid {
@@ -17,74 +17,91 @@
     display: flex; align-items: center; justify-content: center;
     cursor: pointer; font-size: 18px;
   }
-  .hit { background: #4caf50; }
-  .miss { background: #f44336; }
-  .suggest { background: #ffeb3b; }
+  .hit { background:#4caf50; }
+  .miss { background:#f44336; }
+
+  /* suggestion colors (hidden meaning) */
+  .s1 { background:#fff176; } /* fallback */
+  .s2 { background:#81d4fa; }
+  .s3 { background:#aed581; }
+  .s4 { background:#ce93d8; }
+  .s5 { background:#ffcc80; }
 </style>
 </head>
 <body>
 
-<h3>Battleship Guess Helper</h3>
+<h3>Guess Helper</h3>
 <p>Click: Unknown → Hit → Miss → Reset</p>
 
 <div class="grid" id="grid"></div>
-<p><b>Yellow = best next guesses</b></p>
 
 <script>
 const SIZE = 8;
 let board = Array.from({length: SIZE}, () => Array(SIZE).fill(0));
 
 const shapes = [
-  [[0,0],[0,1]], [[0,0],[1,0]],                     // 2 straight
-  [[0,0],[0,1],[0,2]], [[0,0],[1,0],[2,0]],         // 3 straight
-  [[0,0],[1,0],[1,1]], [[0,0],[0,1],[1,0]],         // L
-  [[0,0],[0,1],[1,1]], [[0,0],[1,0],[1,-1]],
-  [[0,0],[0,1],[1,0],[1,1]]                         // 2x2 square
+  { id:2, cells:[[0,0],[0,1]] },
+  { id:2, cells:[[0,0],[1,0]] },
+
+  { id:3, cells:[[0,0],[0,1],[0,2]] },
+  { id:3, cells:[[0,0],[1,0],[2,0]] },
+
+  { id:4, cells:[[0,0],[1,0],[1,1]] },
+  { id:4, cells:[[0,0],[0,1],[1,0]] },
+  { id:4, cells:[[0,0],[0,1],[1,1]] },
+  { id:4, cells:[[0,0],[1,0],[1,-1]] },
+
+  { id:5, cells:[[0,0],[0,1],[1,0],[1,1]] }
 ];
 
 const grid = document.getElementById("grid");
 
-function isShapeComplete(shape, r, c) {
-  return shape.every(([dr,dc]) => {
-    let x=r+dr, y=c+dc;
-    return x>=0 && y>=0 && x<SIZE && y<SIZE && board[x][y]===1;
+function shapeComplete(shape, r, c) {
+  return shape.cells.every(([dr,dc])=>{
+    let x=r+dr,y=c+dc;
+    return x>=0&&y>=0&&x<SIZE&&y<SIZE&&board[x][y]===1;
   });
 }
 
 function probabilityMap() {
-  let prob = Array.from({length: SIZE}, () => Array(SIZE).fill(0));
-  let activeHits = new Set();
+  let prob = Array.from({length: SIZE}, () =>
+    Array.from({length: SIZE}, () => ({}))
+  );
 
+  let activeHits = new Set();
   for (let r=0;r<SIZE;r++)
     for (let c=0;c<SIZE;c++)
       if (board[r][c]===1) activeHits.add(`${r},${c}`);
 
+  // remove completed shapes
   for (let r=0;r<SIZE;r++)
     for (let c=0;c<SIZE;c++)
       for (let s of shapes)
-        if (isShapeComplete(s,r,c))
-          s.forEach(([dr,dc])=>activeHits.delete(`${r+dr},${c+dc}`));
+        if (shapeComplete(s,r,c))
+          s.cells.forEach(([dr,dc])=>activeHits.delete(`${r+dr},${c+dc}`));
 
   // SEARCH MODE
   if (activeHits.size===0) {
     for (let r=0;r<SIZE;r++)
       for (let c=0;c<SIZE;c++)
-        if (board[r][c]===0 && (r+c)%2===0) prob[r][c]=1;
+        if (board[r][c]===0 && (r+c)%2===0)
+          prob[r][c][1]=1;
     return prob;
   }
 
   // TARGET MODE
   for (let r=0;r<SIZE;r++) for (let c=0;c<SIZE;c++) {
-    for (let shape of shapes) {
-      let cells = shape.map(([dr,dc])=>[r+dr,c+dc]);
+    for (let s of shapes) {
+      let cells=s.cells.map(([dr,dc])=>[r+dr,c+dc]);
       if (cells.some(([x,y])=>x<0||y<0||x>=SIZE||y>=SIZE)) continue;
 
-      let vals = cells.map(([x,y])=>board[x][y]);
+      let vals=cells.map(([x,y])=>board[x][y]);
       if (vals.includes(-1)) continue;
       if (!cells.some(([x,y])=>activeHits.has(`${x},${y}`))) continue;
 
       cells.forEach(([x,y])=>{
-        if (board[x][y]===0) prob[x][y]++;
+        if (board[x][y]===0)
+          prob[x][y][s.id]=(prob[x][y][s.id]||0)+1;
       });
     }
   }
@@ -93,8 +110,7 @@ function probabilityMap() {
 
 function render() {
   grid.innerHTML="";
-  let prob = probabilityMap();
-  let max = Math.max(...prob.flat());
+  let prob=probabilityMap();
 
   for (let r=0;r<SIZE;r++) for (let c=0;c<SIZE;c++) {
     let d=document.createElement("div");
@@ -102,8 +118,15 @@ function render() {
 
     if (board[r][c]===1) d.classList.add("hit"), d.textContent="✓";
     if (board[r][c]===-1) d.classList.add("miss"), d.textContent="×";
-    if (board[r][c]===0 && prob[r][c]===max && max>0)
-      d.classList.add("suggest");
+
+    if (board[r][c]===0) {
+      let entries=Object.entries(prob[r][c]);
+      if (entries.length>0) {
+        entries.sort((a,b)=>b[1]-a[1]);
+        let best=entries[0][0];
+        d.classList.add("s"+best);
+      }
+    }
 
     d.onclick=()=>{
       board[r][c]=board[r][c]===0?1:board[r][c]===1?-1:0;
